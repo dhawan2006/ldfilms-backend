@@ -9,13 +9,11 @@ const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", true);
 
-
 /* ===== MIDDLEWARE ===== */
 
 app.use(cors({
   origin: "*"
 }));
-
 
 app.use(express.json());
 
@@ -27,12 +25,11 @@ app.get("/", (req, res) => {
   });
 });
 
-
 /* ===== DATABASE ===== */
 
 mongoose.connect(process.env.MONGO_URL)
-.then(() => console.log("Database Connected"))
-.catch(err => console.log(err));
+.then(() => console.log("✅ Database Connected"))
+.catch(err => console.log("❌ Database Error:", err));
 
 /* ===== MODEL ===== */
 
@@ -50,16 +47,30 @@ const contactSchema = new mongoose.Schema({
 
 const Contact = mongoose.model("Contact", contactSchema);
 
-/* ===== EMAIL (OPTIONAL) ===== */
+/* ===== EMAIL CONFIGURATION (UPDATED) ===== */
 
 let transporter;
 
 if(process.env.EMAIL && process.env.EMAIL_PASS){
   transporter = nodemailer.createTransport({
-    service: "gmail",
+    host: "smtp.gmail.com",  // Explicit host
+    port: 465,               // Secure Port 465 prevents timeouts on Render
+    secure: true,            // TRUE for port 465
     auth: {
       user: process.env.EMAIL,
-      pass: process.env.EMAIL_PASS
+      pass: process.env.EMAIL_PASS // Make sure this is your App Password
+    },
+    // Timeouts to prevent hanging
+    connectionTimeout: 10000,
+    greetingTimeout: 10000
+  });
+
+  // Verify connection on startup
+  transporter.verify((error, success) => {
+    if (error) {
+      console.log("❌ Email Connection Failed:", error);
+    } else {
+      console.log("✅ Email System Ready");
     }
   });
 }
@@ -74,6 +85,7 @@ app.post("/contact", async (req, res) => {
 
     const { name, email, phone, date, message } = req.body;
 
+    // 1. Validation
     if (!name || !email || !phone) {
       return res.json({
         success: false,
@@ -81,6 +93,7 @@ app.post("/contact", async (req, res) => {
       });
     }
 
+    // 2. Save to Database
     const newContact = new Contact({
       name,
       email,
@@ -90,33 +103,41 @@ app.post("/contact", async (req, res) => {
     });
 
     await newContact.save();
+    console.log("✅ Data saved to MongoDB");
 
-    // Send mail only if setup
+    // 3. Send Email (Fail-Safe Block)
     if(transporter){
-      await transporter.sendMail({
-        from: process.env.EMAIL,
-        to: process.env.EMAIL,
-        subject: "New Photoshoot Request",
-        text: `
+      try {
+        await transporter.sendMail({
+          from: process.env.EMAIL,
+          to: process.env.EMAIL, // Sending to yourself
+          subject: "New Photoshoot Request",
+          text: `
+New Request Received!
+---------------------
 Name: ${name}
 Email: ${email}
 Phone: ${phone}
 Date: ${date}
 Message: ${message}
 `
-      });
+        });
+        console.log("✅ Email sent successfully");
+      } catch (emailError) {
+        // If email fails, we log it but do NOT crash the response
+        console.error("⚠️ Email failed to send (but data is safe):", emailError.message);
+      }
     }
 
+    // 4. Send Success Response (Always reaches here if DB save works)
     res.json({
       success: true,
-      message: "Request sent"
+      message: "Request sent successfully"
     });
 
   } catch (err) {
-
-    console.log(err);
-
-    res.json({
+    console.log("❌ Server Error:", err);
+    res.status(500).json({
       success: false,
       message: "Server Error"
     });
@@ -125,8 +146,9 @@ Message: ${message}
 
 /* ===== START ===== */
 
-const PORT = 8000;
+// Use Render's port if available, otherwise 8000
+const PORT = process.env.PORT || 8000;
 
 app.listen(PORT, () => {
-  console.log("Server running on " + PORT);
+  console.log("Server running on port " + PORT);
 });
