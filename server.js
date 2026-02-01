@@ -56,20 +56,12 @@ let transporter;
 
 if(process.env.EMAIL && process.env.EMAIL_PASS){
   transporter = nodemailer.createTransport({
-  host: "smtp-relay.brevo.com",
-  port: 587,
-  secure: false, // for 587
-  auth: {
-    user: process.env.EMAIL,
-    pass: process.env.EMAIL_PASS
-  },
-  tls: {
-    rejectUnauthorized: false
-  }
-});
-
-
-
+    service: "gmail",
+    auth: {
+      user: process.env.EMAIL,
+      pass: process.env.EMAIL_PASS
+    }
+  });
 }
 
 /* ===== ROUTE ===== */
