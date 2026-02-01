@@ -47,30 +47,32 @@ const contactSchema = new mongoose.Schema({
 
 const Contact = mongoose.model("Contact", contactSchema);
 
-/* ===== EMAIL CONFIGURATION (UPDATED) ===== */
+/* ===== EMAIL CONFIGURATION (ATTEMPT 2: PORT 587) ===== */
 
 let transporter;
 
 if(process.env.EMAIL && process.env.EMAIL_PASS){
   transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",  // Explicit host
-    port: 465,               // Secure Port 465 prevents timeouts on Render
-    secure: true,            // TRUE for port 465
+    host: "smtp.gmail.com",
+    port: 587,               // Try Port 587 (Standard TLS)
+    secure: false,           // Must be FALSE for Port 587
     auth: {
       user: process.env.EMAIL,
-      pass: process.env.EMAIL_PASS // Make sure this is your App Password
+      pass: process.env.EMAIL_PASS
     },
-    // Timeouts to prevent hanging
-    connectionTimeout: 10000,
-    greetingTimeout: 10000
+    tls: {
+      rejectUnauthorized: false // Helps bypass some cloud SSL issues
+    },
+    // Force IPv4 to prevent IPv6 timeout issues
+    family: 4 
   });
 
   // Verify connection on startup
   transporter.verify((error, success) => {
     if (error) {
-      console.log("❌ Email Connection Failed:", error);
+      console.log("❌ Email Connection Failed (Check logs):", error.message);
     } else {
-      console.log("✅ Email System Ready");
+      console.log("✅ Email System Ready (Port 587)");
     }
   });
 }
@@ -82,7 +84,6 @@ app.post("/contact", async (req, res) => {
   console.log("Received:", req.body);
 
   try {
-
     const { name, email, phone, date, message } = req.body;
 
     // 1. Validation
@@ -124,12 +125,12 @@ Message: ${message}
         });
         console.log("✅ Email sent successfully");
       } catch (emailError) {
-        // If email fails, we log it but do NOT crash the response
-        console.error("⚠️ Email failed to send (but data is safe):", emailError.message);
+        // Log error but DO NOT crash the response
+        console.error("⚠️ Email failed to send:", emailError.message);
       }
     }
 
-    // 4. Send Success Response (Always reaches here if DB save works)
+    // 4. Send Success Response
     res.json({
       success: true,
       message: "Request sent successfully"
@@ -146,7 +147,6 @@ Message: ${message}
 
 /* ===== START ===== */
 
-// Use Render's port if available, otherwise 8000
 const PORT = process.env.PORT || 8000;
 
 app.listen(PORT, () => {
